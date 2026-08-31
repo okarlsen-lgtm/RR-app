@@ -43,6 +43,8 @@ export interface TireSet {
   rearWearPercent: number;
 }
 
+export type SurfaceRoughness = "fin" | "middels" | "grov" | "ukjent";
+
 export interface Track {
   id: string;
   name: string;
@@ -50,6 +52,10 @@ export interface Track {
   lon: number;
   lengthKm?: number;
   isCustom?: boolean;
+  /** Kuratert anslag basert på offentlig tilgjengelig informasjon — ikke målt data. */
+  surfaceRoughness?: SurfaceRoughness;
+  /** Kuratert fritekst om banedekket, med kildehenvisning der det finnes. */
+  surfaceNotes?: string;
 }
 
 export interface WeatherSnapshot {

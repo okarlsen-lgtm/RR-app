@@ -7,6 +7,7 @@ import type {
   TireCompound,
   TirePressureRecommendation,
   TireSet,
+  Track,
   WeatherSnapshot,
 } from "../types";
 
@@ -111,6 +112,7 @@ export function computeSuspensionRecommendation(
   driver: Driver,
   bike: Bike,
   _suspension: SuspensionSetup,
+  track?: Track,
 ): SuspensionRecommendation {
   const { weight: bikeWeight, estimated } = effectiveBikeWeightKg(bike);
   const systemWeightDelta = driver.weightKg + bikeWeight - REFERENCE_SYSTEM_KG;
@@ -127,9 +129,16 @@ export function computeSuspensionRecommendation(
 
   const experienceIsBeginner = driver.experience === "nybegynner" || driver.experience === "amatør";
 
-  const compressionNote = experienceIsBeginner
+  let compressionNote = experienceIsBeginner
     ? "Start 2–3 klikk mykere enn standard på kompresjon for bedre komfort og forutsigbarhet mens du blir kjent med banen."
     : "Øk kompresjonsdemping gradvis fra standard for mer støtte ved hard bremsing og i raske svinger — finjuster sving for sving.";
+
+  if (track?.surfaceRoughness === "grov") {
+    compressionNote +=
+      " Banen er kuratert som grovere/humpete asfalt — vurder å starte litt mykere enn ellers for bedre hjulkontakt og komfort over ujevnheter.";
+  } else if (track?.surfaceRoughness === "fin") {
+    compressionNote += " Banen er kuratert som jevn/fin asfalt — mindre behov for komfortjustering, du kan gå friere på oppsettet for banefart.";
+  }
 
   const reboundNote = experienceIsBeginner
     ? "Hold retur nær standardinnstilling til du har mer banetid — for rask retur føles nervøst, for treg gjør sykkelen tung i svingskifter."
@@ -151,6 +160,8 @@ export function computeRecommendation(
   suspension: SuspensionSetup,
   tires: TireSet,
   weather: WeatherSnapshot | null,
+  track?: Track,
+  trackUserNote?: string,
 ): Recommendation {
   const generalNotes = [
     "Dette er veiledende startpunkter basert på tommelfingerregler — fininnstill alltid på banen, og rådfør deg med en erfaren mekaniker/tuner ved tvil.",
@@ -158,9 +169,15 @@ export function computeRecommendation(
   if (isWet(weather)) {
     generalNotes.push("Våte forhold meldt — kjør forsiktig ut av boksen og bygg opp fart/varme gradvis.");
   }
+  if (track?.surfaceNotes) {
+    generalNotes.push(`Om banedekket (kuratert, ikke målt): ${track.surfaceNotes}`);
+  }
+  if (trackUserNote?.trim()) {
+    generalNotes.push(`Dine egne notater om banen: ${trackUserNote.trim()}`);
+  }
 
   return {
-    suspension: computeSuspensionRecommendation(driver, bike, suspension),
+    suspension: computeSuspensionRecommendation(driver, bike, suspension, track),
     tires: computeTireRecommendation(driver, bike, tires, weather),
     generalNotes,
   };

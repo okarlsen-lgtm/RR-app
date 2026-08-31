@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Field, NumberInput, Select, TextInput } from "../components/ui";
 import { BUILT_IN_TRACKS } from "../data/tracks";
 import { computeRecommendation } from "../lib/recommend";
@@ -10,10 +10,18 @@ import {
   sessionStore,
   suspensionStore,
   tireSetStore,
+  trackUserNoteStore,
 } from "../lib/storage";
 import { fetchCurrentWeather } from "../lib/weather";
-import type { Recommendation, SetupSession, Track, WeatherSnapshot } from "../types";
+import type { Recommendation, SetupSession, SurfaceRoughness, Track, WeatherSnapshot } from "../types";
 import { useForceUpdate } from "./Profiles";
+
+const SURFACE_LABELS: Record<SurfaceRoughness, string> = {
+  fin: "Jevn/fin asfalt (kuratert)",
+  middels: "Middels grov asfalt (kuratert)",
+  grov: "Grov/humpete asfalt (kuratert)",
+  ukjent: "Ukjent — ingen pålitelig kilde funnet",
+};
 
 export function NewSetupPage() {
   const refresh = useForceUpdate();
@@ -44,6 +52,19 @@ export function NewSetupPage() {
   const [saved, setSaved] = useState(false);
 
   const selectedTrack = allTracks.find((t) => t.id === trackId);
+
+  const [trackUserNote, setTrackUserNote] = useState(() => trackUserNoteStore.get(trackId));
+  const [trackNoteSaved, setTrackNoteSaved] = useState(false);
+
+  useEffect(() => {
+    setTrackUserNote(trackUserNoteStore.get(trackId));
+    setTrackNoteSaved(false);
+  }, [trackId]);
+
+  function saveTrackUserNote() {
+    trackUserNoteStore.set(trackId, trackUserNote);
+    setTrackNoteSaved(true);
+  }
 
   function saveCustomTrack() {
     if (!customName.trim() || customLat === "" || customLon === "") return;
@@ -77,7 +98,7 @@ export function NewSetupPage() {
     const suspension = suspensionsForBike.find((s) => s.id === suspensionId);
     const tires = tireSets.find((t) => t.id === tireSetId);
     if (!driver || !bike || !suspension || !tires) return;
-    setRecommendation(computeRecommendation(driver, bike, suspension, tires, weather));
+    setRecommendation(computeRecommendation(driver, bike, suspension, tires, weather, selectedTrack, trackUserNote));
     setSaved(false);
   }
 
@@ -206,6 +227,39 @@ export function NewSetupPage() {
             </Field>
             <div className="flex items-end">
               <Button onClick={saveCustomTrack}>Lagre bane</Button>
+            </div>
+          </div>
+        )}
+
+        {selectedTrack && (
+          <div className="mt-4 rounded-lg border border-black/10 p-3 text-sm dark:border-white/10">
+            <div className="mb-1 font-semibold">
+              Banedekke: {SURFACE_LABELS[selectedTrack.surfaceRoughness ?? "ukjent"]}
+            </div>
+            {selectedTrack.surfaceNotes ? (
+              <p className="text-neutral-600 dark:text-neutral-400">{selectedTrack.surfaceNotes}</p>
+            ) : (
+              <p className="text-neutral-500">Ingen kuratert info om banedekket for denne banen ennå.</p>
+            )}
+            <div className="mt-3">
+              <Field label="Dine egne notater om banen (lagres kun i din nettleser)">
+                <textarea
+                  className="rounded-lg border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 dark:border-white/15 dark:bg-neutral-800"
+                  rows={2}
+                  value={trackUserNote}
+                  onChange={(e) => {
+                    setTrackUserNote(e.target.value);
+                    setTrackNoteSaved(false);
+                  }}
+                  placeholder="F.eks. humpete i sving 4, mye grep i regn…"
+                />
+              </Field>
+              <div className="mt-2 flex items-center gap-3">
+                <Button variant="secondary" onClick={saveTrackUserNote}>
+                  Lagre notat
+                </Button>
+                {trackNoteSaved && <span className="text-sm text-green-600">Lagret ✓</span>}
+              </div>
             </div>
           </div>
         )}
