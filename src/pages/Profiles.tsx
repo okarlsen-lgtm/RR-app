@@ -74,8 +74,12 @@ function BikeForm({ onSaved }: { onSaved: () => void }) {
           <option value="annet">Annet</option>
         </Select>
       </Field>
-      <Field label="Vekt (kg, valgfritt)">
-        <NumberInput value={weightKg} onChange={(e) => setWeightKg(e.target.value === "" ? "" : Number(e.target.value))} />
+      <Field label="Vekt kjøreklar (kg)">
+        <NumberInput
+          value={weightKg}
+          onChange={(e) => setWeightKg(e.target.value === "" ? "" : Number(e.target.value))}
+          placeholder="f.eks. 190"
+        />
       </Field>
       <div className="col-span-2 flex items-end sm:col-span-1">
         <Button onClick={submit}>Legg til MC</Button>
@@ -266,7 +270,7 @@ export function ProfilesPage() {
             <ListRow
               key={b.id}
               primary={b.name}
-              secondary={`${b.category}${b.weightKg ? ` · ${b.weightKg} kg` : ""}`}
+              secondary={`${b.category}${b.weightKg ? ` · ${b.weightKg} kg` : " · vekt ikke satt (bruker kategori-anslag i beregninger)"}`}
               onDelete={() => {
                 bikeStore.remove(b.id);
                 refresh();

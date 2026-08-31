@@ -19,6 +19,26 @@ const BASE_COLD_PSI: Record<TireCompound, { front: number; rear: number }> = {
   gate: { front: 24, rear: 22 },
 };
 
+/**
+ * Grove, typiske våtvekter (kg) per kategori — brukes KUN som fallback når
+ * brukeren ikke har fylt inn faktisk MC-vekt. Ikke modellspesifikke tall.
+ */
+const BIKE_DEFAULT_WEIGHT_KG: Record<Bike["category"], number> = {
+  supersport: 187,
+  superbike: 200,
+  naken: 190,
+  annet: 195,
+};
+
+const REFERENCE_RIDER_KG = 75;
+const REFERENCE_BIKE_KG = 190;
+const REFERENCE_SYSTEM_KG = REFERENCE_RIDER_KG + REFERENCE_BIKE_KG;
+
+function effectiveBikeWeightKg(bike: Bike): { weight: number; estimated: boolean } {
+  if (bike.weightKg) return { weight: bike.weightKg, estimated: false };
+  return { weight: BIKE_DEFAULT_WEIGHT_KG[bike.category], estimated: true };
+}
+
 function isWet(weather: WeatherSnapshot | null): boolean {
   if (!weather) return false;
   return (
@@ -29,15 +49,22 @@ function isWet(weather: WeatherSnapshot | null): boolean {
 
 export function computeTireRecommendation(
   driver: Driver,
+  bike: Bike,
   tires: TireSet,
   weather: WeatherSnapshot | null,
 ): TirePressureRecommendation {
   const base = BASE_COLD_PSI[tires.compound];
   const notes: string[] = [];
 
-  const weightDelta = driver.weightKg - 75;
-  const weightAdjustFront = clamp((weightDelta / 10) * 0.15, -1, 1.2);
-  const weightAdjustRear = clamp((weightDelta / 10) * 0.3, -1.5, 2);
+  const { weight: bikeWeight, estimated } = effectiveBikeWeightKg(bike);
+  const systemWeightDelta = driver.weightKg + bikeWeight - REFERENCE_SYSTEM_KG;
+  const weightAdjustFront = clamp((systemWeightDelta / 10) * 0.15, -1, 1.2);
+  const weightAdjustRear = clamp((systemWeightDelta / 10) * 0.3, -1.5, 2);
+  if (estimated) {
+    notes.push(
+      `MC-vekt er ikke registrert — brukte et anslag på ${bikeWeight} kg for kategorien "${bike.category}". Fyll inn faktisk vekt under Profiler for mer presist trykk.`,
+    );
+  }
 
   let tempAdjust = 0;
   if (weather) {
@@ -82,16 +109,20 @@ export function computeTireRecommendation(
 
 export function computeSuspensionRecommendation(
   driver: Driver,
-  _bike: Bike,
+  bike: Bike,
   _suspension: SuspensionSetup,
 ): SuspensionRecommendation {
-  const weightDelta = driver.weightKg - 75;
+  const { weight: bikeWeight, estimated } = effectiveBikeWeightKg(bike);
+  const systemWeightDelta = driver.weightKg + bikeWeight - REFERENCE_SYSTEM_KG;
 
   let preloadHint = "Start med fabrikkinnstilt forspenning og juster til sag-målet.";
-  if (weightDelta > 15) {
-    preloadHint = "Du er tyngre enn referanse (75 kg) — sett trolig mer forspenning enn standard, og vurder stivere fjær om sag-målet ikke nås.";
-  } else if (weightDelta < -15) {
-    preloadHint = "Du er lettere enn referanse (75 kg) — sett trolig mindre forspenning enn standard, og vurder mykere fjær om sag-målet ikke nås.";
+  if (systemWeightDelta > 15) {
+    preloadHint = "Sjåfør + MC er tyngre enn referansen (75 kg sjåfør + 190 kg MC) — sett trolig mer forspenning enn standard, og vurder stivere fjær om sag-målet ikke nås.";
+  } else if (systemWeightDelta < -15) {
+    preloadHint = "Sjåfør + MC er lettere enn referansen (75 kg sjåfør + 190 kg MC) — sett trolig mindre forspenning enn standard, og vurder mykere fjær om sag-målet ikke nås.";
+  }
+  if (estimated) {
+    preloadHint += ` (MC-vekt er anslått til ${bikeWeight} kg ut fra kategori — fyll inn faktisk vekt for et mer presist forslag.)`;
   }
 
   const experienceIsBeginner = driver.experience === "nybegynner" || driver.experience === "amatør";
@@ -130,7 +161,7 @@ export function computeRecommendation(
 
   return {
     suspension: computeSuspensionRecommendation(driver, bike, suspension),
-    tires: computeTireRecommendation(driver, tires, weather),
+    tires: computeTireRecommendation(driver, bike, tires, weather),
     generalNotes,
   };
 }
