@@ -7,6 +7,7 @@ import type { Track } from "../types";
  * koordinater om nødvendig.
  */
 export const BUILT_IN_TRACKS: Track[] = [
+  { id: "arctic-circle", name: "Arctic Circle Raceway", lat: 66.4238, lon: 14.4465, lengthKm: 3.753 },
   { id: "rudskogen", name: "Rudskogen Motorsenter", lat: 59.3703, lon: 11.2711, lengthKm: 3.242 },
   { id: "valerbanen", name: "Vålerbanen", lat: 59.5312, lon: 10.7524, lengthKm: 2.0 },
   { id: "froland", name: "Frøland Motorsenter", lat: 58.4886, lon: 8.5339, lengthKm: 1.8 },
