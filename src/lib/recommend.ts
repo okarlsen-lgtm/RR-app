@@ -1,0 +1,144 @@
+import type {
+  Bike,
+  Driver,
+  Recommendation,
+  SuspensionRecommendation,
+  SuspensionSetup,
+  TireCompound,
+  TirePressureRecommendation,
+  TireSet,
+  WeatherSnapshot,
+} from "../types";
+
+const PSI_TO_KPA = 6.89476;
+
+const BASE_COLD_PSI: Record<TireCompound, { front: number; rear: number }> = {
+  slick: { front: 29, rear: 26 },
+  dot: { front: 31, rear: 29 },
+  veidekk: { front: 34, rear: 32 },
+  gate: { front: 24, rear: 22 },
+};
+
+function isWet(weather: WeatherSnapshot | null): boolean {
+  if (!weather) return false;
+  return (
+    weather.precipitationMmHr > 0.2 ||
+    /rain|sleet|snow/.test(weather.symbolCode)
+  );
+}
+
+export function computeTireRecommendation(
+  driver: Driver,
+  tires: TireSet,
+  weather: WeatherSnapshot | null,
+): TirePressureRecommendation {
+  const base = BASE_COLD_PSI[tires.compound];
+  const notes: string[] = [];
+
+  const weightDelta = driver.weightKg - 75;
+  const weightAdjustFront = clamp((weightDelta / 10) * 0.15, -1, 1.2);
+  const weightAdjustRear = clamp((weightDelta / 10) * 0.3, -1.5, 2);
+
+  let tempAdjust = 0;
+  if (weather) {
+    tempAdjust = clamp((20 - weather.airTempC) * 0.02, -1.5, 1.5);
+  }
+
+  let wearAdjustFront = 0;
+  let wearAdjustRear = 0;
+  if (tires.frontWearPercent > 60) wearAdjustFront += 0.5;
+  if (tires.rearWearPercent > 60) wearAdjustRear += 0.5;
+  if (tires.frontWearPercent > 80) {
+    wearAdjustFront += 0.5;
+    notes.push("Fordekk er kraftig slitt (>80%) — vurder å bytte før neste økt.");
+  }
+  if (tires.rearWearPercent > 80) {
+    wearAdjustRear += 0.5;
+    notes.push("Bakdekk er kraftig slitt (>80%) — vurder å bytte før neste økt.");
+  }
+
+  const wet = isWet(weather);
+  if (wet && tires.compound !== "gate") {
+    notes.push(
+      "Meldingen viser våte forhold — vurder regndekk (gate) i stedet for dagens dekksett. Trykket under gjelder tørre forhold.",
+    );
+  }
+
+  const frontColdPsi = round1(base.front + weightAdjustFront + tempAdjust + wearAdjustFront);
+  const rearColdPsi = round1(base.rear + weightAdjustRear + tempAdjust + wearAdjustRear);
+
+  notes.push(
+    "Kaldtrykk målt før økten. Sjekk og juster varmt trykk etter noen runder — mål er stabilt driftstrykk, ikke bare kaldtrykket.",
+  );
+
+  return {
+    frontColdPsi,
+    rearColdPsi,
+    frontColdKpa: Math.round(frontColdPsi * PSI_TO_KPA),
+    rearColdKpa: Math.round(rearColdPsi * PSI_TO_KPA),
+    notes,
+  };
+}
+
+export function computeSuspensionRecommendation(
+  driver: Driver,
+  _bike: Bike,
+  _suspension: SuspensionSetup,
+): SuspensionRecommendation {
+  const weightDelta = driver.weightKg - 75;
+
+  let preloadHint = "Start med fabrikkinnstilt forspenning og juster til sag-målet.";
+  if (weightDelta > 15) {
+    preloadHint = "Du er tyngre enn referanse (75 kg) — sett trolig mer forspenning enn standard, og vurder stivere fjær om sag-målet ikke nås.";
+  } else if (weightDelta < -15) {
+    preloadHint = "Du er lettere enn referanse (75 kg) — sett trolig mindre forspenning enn standard, og vurder mykere fjær om sag-målet ikke nås.";
+  }
+
+  const experienceIsBeginner = driver.experience === "nybegynner" || driver.experience === "amatør";
+
+  const compressionNote = experienceIsBeginner
+    ? "Start 2–3 klikk mykere enn standard på kompresjon for bedre komfort og forutsigbarhet mens du blir kjent med banen."
+    : "Øk kompresjonsdemping gradvis fra standard for mer støtte ved hard bremsing og i raske svinger — finjuster sving for sving.";
+
+  const reboundNote = experienceIsBeginner
+    ? "Hold retur nær standardinnstilling til du har mer banetid — for rask retur føles nervøst, for treg gjør sykkelen tung i svingskifter."
+    : "Juster retur for å balansere hjulkontakt over kanter mot stabilitet i svingskifter; test én endring om gangen.";
+
+  return {
+    frontPreloadNote: preloadHint,
+    frontSagTargetMm: "30–35 mm statisk sag (fullt påkledd fører sittende på sykkelen)",
+    rearPreloadNote: preloadHint,
+    rearSagTargetMm: "25–30 mm statisk sag",
+    compressionNote,
+    reboundNote,
+  };
+}
+
+export function computeRecommendation(
+  driver: Driver,
+  bike: Bike,
+  suspension: SuspensionSetup,
+  tires: TireSet,
+  weather: WeatherSnapshot | null,
+): Recommendation {
+  const generalNotes = [
+    "Dette er veiledende startpunkter basert på tommelfingerregler — fininnstill alltid på banen, og rådfør deg med en erfaren mekaniker/tuner ved tvil.",
+  ];
+  if (isWet(weather)) {
+    generalNotes.push("Våte forhold meldt — kjør forsiktig ut av boksen og bygg opp fart/varme gradvis.");
+  }
+
+  return {
+    suspension: computeSuspensionRecommendation(driver, bike, suspension),
+    tires: computeTireRecommendation(driver, tires, weather),
+    generalNotes,
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
